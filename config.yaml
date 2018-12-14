@@ -1,0 +1,13 @@
+controllers:
+  - name: Engine
+    address:
+      id: "7E0"
+      extended: false
+    services:
+      "00":
+        action:
+          generator: "bla.groovy"
+        parameters:
+          "01":
+            action:
+              generator: "test.groovy"
