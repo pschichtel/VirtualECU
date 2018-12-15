@@ -50,6 +50,16 @@ object Functions {
         t => t * m
     }
 
+    def log: F = math.log10
+
+    def ln: F = math.log
+
+    def log(base: Double): F = math.log(_) / math.log(base)
+
+    def exp: F = math.exp
+
+    def exp(base: Double): F = math.pow(base, _)
+
     def square(period: FiniteDuration): F = sine(period) andThen signum
 
     def triangle(period: FiniteDuration): F = {
