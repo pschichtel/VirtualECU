@@ -4,7 +4,7 @@ import java.nio.file.{Files, Path, Paths, StandardOpenOption}
 
 import net.jcazevedo.moultingyaml._
 
-import scala.concurrent.duration.{DurationDouble, FiniteDuration}
+import scala.concurrent.duration.DurationDouble
 import scala.io.Source
 
 object Main {
@@ -32,7 +32,8 @@ object Main {
         val emulation = Source.fromFile(conf.toFile, "UTF-8").mkString.parseYaml.convertTo[Emulation]
         println(s"$interfaceName $emulation")
 
-        import Functions._
+        val functions = new Functions(FiniteDurationDomain)
+        import functions._
 
         val timeFrame = 15.minutes
 
