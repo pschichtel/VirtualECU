@@ -1,13 +1,24 @@
 controllers:
-  - name: Engine
-    address:
-      id: "7E0"
-      extended: false
+  "7E0":
+    name: Engine
     services:
-      "00":
+      "01":
+        name: Live Data
         action:
-          generator: "bla.groovy"
+          generator: "constant(1.0) andThen unsignedInteger(1)"
         parameters:
-          "01":
+          "05":
+            name: Coolant Temperature
             action:
-              generator: "test.groovy"
+              generator: "add(linear(1, 8.minutes), gaussianRandom(-0.001, 0.001)) andThen lowCut(-40) andThen combined(90.0, scale, highCut) andThen shift(40) andThen unsignedInteger(1)"
+      "09":
+        name: Metadata?
+        parameters:
+          "02":
+            name: Vehicle ID
+            action:
+              generator: 'constant("01234567890123456") andThen getBytes("UTF-8")'
+          "0A":
+            name: ECU Name
+            action:
+              generator: 'constant("Engine") andThen getBytes("UTF-8")'
