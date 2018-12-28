@@ -1,13 +1,16 @@
 package tel.schich.virtualecu
 
+import java.nio.ByteBuffer
 import java.nio.file.{Files, Path, Paths}
+import java.time.Duration.ofMinutes
 import java.util.concurrent.ThreadFactory
 
 import com.twitter.util.Eval
 import net.jcazevedo.moultingyaml._
-import tel.schich.javacan.NativeRawCanSocket
-import tel.schich.javacan.isotp.AggregatingFrameHandler.aggregateFrames
-import tel.schich.javacan.isotp._
+import tel.schich.javacan.IsotpAddress.SFF_FUNCTIONAL_ADDRESS
+import tel.schich.javacan.{CanChannels, IsotpAddress, IsotpCanChannel}
+import tel.schich.javacan.select.JavaCANSelectorProvider
+import tel.schich.javacan.util.IsotpBroker
 import tel.schich.obd4s.ObdBridge
 import tel.schich.obd4s.ObdHelper.{asHex, hexDump}
 
@@ -73,32 +76,33 @@ object Main {
 
         val threadGroup = new ThreadGroup("virtual-ecu-worker-threads")
         val threads: ThreadFactory = r => new Thread(threadGroup, r, "virtual-ecu-worker")
-        val socket = NativeRawCanSocket.create()
-        socket.bind(interfaceName)
-        val broker = new ISOTPBroker(socket, threads, QueueSettings.DEFAULT, ProtocolParameters.DEFAULT, TestDeviceFlowController.INSTANCE)
+        val functionalChannel = CanChannels.newIsotpChannel(interfaceName, SFF_FUNCTIONAL_ADDRESS, 0x7FF)
+        val provider = new JavaCANSelectorProvider()
+        val broker = new IsotpBroker(threads, provider, ofMinutes(1))
 
         val controllerChannels = controllers.mapValues { controller =>
-            broker.createChannel(ISOTPAddress.returnAddress(controller.receiveAddress), controller.receiveAddress, aggregateFrames(handleRequest(controller, t0)))
+            val ch = CanChannels.newIsotpChannel(interfaceName, IsotpAddress.returnAddress(controller.receiveAddress), controller.receiveAddress)
+            broker.addChannel(ch, handleRequest(controller, t0))
+            ch
         }
 
-        broker.createChannel(0x000, ISOTPAddress.SFF_FUNCTIONAL_ADDRESS, new FrameHandlerAdapter {
-            override def handleSingleFrame(ch: ISOTPChannel, sender: Int, payload: Array[Byte]): Unit = {
-                println("Received functional request!")
-                for ((addr, controller) <- controllers) {
-                    handleRequest(controller, t0)(controllerChannels(addr), addr, payload)
-                }
+        broker.addChannel(functionalChannel, (_, buf, offset, length) => {
+            println("Received functional request!")
+            for ((addr, controller) <- controllers) {
+                handleRequest(controller, t0)(controllerChannels(addr), buf, offset, length)
             }
         })
 
         broker.start()
     }
 
-    def handleRequest(controller: ECU, t0: Long)(ch: ISOTPChannel, sender: Int, payload: Array[Byte]): Unit = {
+    def handleRequest(controller: ECU, t0: Long)(ch: IsotpCanChannel, buffer: ByteBuffer, offset: Int, length: Int): Unit = {
 
         val dt = System.currentTimeMillis() - t0
 
-        payload match {
-            case Array(sid) =>
+        length match {
+            case 1 =>
+                val sid = buffer.get(offset)
                 println(s"Controller: ${controller.name}")
                 println(s"Service:    ${asHex(sid)}")
                 controller.services.get(sid) match {
@@ -107,8 +111,12 @@ object Main {
                             case Some(action) =>
                                 action.execute(dt) match {
                                     case DataResponse(data) =>
-                                        val payload = (sid + ObdBridge.PositiveResponseBase).toByte +: data
-                                        ch.send(payload)
+                                        buffer.rewind()
+                                        buffer.put((sid + ObdBridge.PositiveResponseBase).toByte)
+                                        buffer.put(data)
+                                        buffer.rewind()
+
+                                        ch.write(buffer, 0, data.length + 1)
                                     case Error(msg) =>
                                         println(s"Action failed: $msg")
                                 }
@@ -118,7 +126,12 @@ object Main {
                     case None =>
                         println("unknown service!")
                 }
-            case Array(sid, pids @ _*) =>
+            case n if n > 1 =>
+                val sid = buffer.get(offset)
+                val pids = Array.ofDim[Byte](length - 1)
+                buffer.position(offset + 1)
+                buffer.get(pids)
+                buffer.rewind()
                 println(s"Controller: ${controller.name}")
                 println(s"Service:    ${asHex(sid)}")
                 println(s"Parameters: ${hexDump(pids)}")
@@ -143,7 +156,10 @@ object Main {
                                 }
                             responses match {
                                 case DataResponse(data) =>
-                                    ch.send(data)
+                                    buffer.rewind()
+                                    buffer.put(data)
+                                    buffer.rewind()
+                                    ch.write(buffer, 0, data.length)
                                 case Error(err) =>
                                     println(s"One of the actions failed: $err")
 
