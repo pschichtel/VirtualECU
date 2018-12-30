@@ -165,7 +165,7 @@ object Quantizers {
         val allBytes = i.toBigInt().toByteArray
 
         if (size == allBytes.length) allBytes
-        else allBytes.slice(allBytes.length - size, size)
+        else allBytes.slice(allBytes.length - size, allBytes.length)
     }
 
     def getBytes(charset: String): String => Array[Byte] = _.getBytes(charset)
