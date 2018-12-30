@@ -15,8 +15,11 @@ import tel.schich.obd4s.ObdBridge
 import tel.schich.obd4s.ObdHelper.{asHex, hexDump}
 
 import scala.io.Source
+import scala.util.Try
 
 object Main {
+
+    private val writeBuffer = IsotpCanChannel.allocateSufficientMemory()
 
     val Name = "Virtual ECU"
 
@@ -62,13 +65,17 @@ object Main {
                     case (hexSid, serviceSpec) =>
                         val sid = parseUnsignedHex(hexSid)
 
+                        val actionLoader = loadAction(eval) _
+
                         val parameters = serviceSpec.parameters.map {
                             case (hexPid, parameterSpec) =>
                                 val pid = parseUnsignedHex(hexPid)
 
-                                (pid, Parameter(parameterSpec.name, pid, new ParameterAction(eval, parameterSpec.action.generator)))
+                                val action = actionLoader(parameterSpec.action).getOrElse(NoOpAction)
+
+                                (pid, Parameter(parameterSpec.name, pid, action))
                         }
-                        val service = Service(serviceSpec.name, sid, parameters, serviceSpec.action.map(a => new ParameterAction(eval, a.generator)))
+                        val service = Service(serviceSpec.name, sid, parameters, serviceSpec.action.flatMap(actionLoader))
                         (sid, service)
                 }
                 (addr, ECU(ecuSpec.name, addr, services))
@@ -81,28 +88,28 @@ object Main {
         val broker = new IsotpBroker(threads, provider, ofMinutes(1))
 
         val controllerChannels = controllers.mapValues { controller =>
-            val ch = CanChannels.newIsotpChannel(interfaceName, IsotpAddress.returnAddress(controller.receiveAddress), controller.receiveAddress)
+            val ch = CanChannels.newIsotpChannel(interfaceName, controller.receiveAddress, IsotpAddress.returnAddress(controller.receiveAddress))
             broker.addChannel(ch, handleRequest(controller, t0))
             ch
         }
 
-        broker.addChannel(functionalChannel, (_, buf, offset, length) => {
+        broker.addChannel(functionalChannel, (_, buf) => {
             println("Received functional request!")
             for ((addr, controller) <- controllers) {
-                handleRequest(controller, t0)(controllerChannels(addr), buf, offset, length)
+                handleRequest(controller, t0)(controllerChannels(addr), buf)
             }
         })
 
         broker.start()
     }
 
-    def handleRequest(controller: ECU, t0: Long)(ch: IsotpCanChannel, buffer: ByteBuffer, offset: Int, length: Int): Unit = {
+    def handleRequest(controller: ECU, t0: Long)(ch: IsotpCanChannel, buffer: ByteBuffer): Unit = {
 
         val dt = System.currentTimeMillis() - t0
 
-        length match {
+        buffer.remaining() match {
             case 1 =>
-                val sid = buffer.get(offset)
+                val sid = buffer.get()
                 println(s"Controller: ${controller.name}")
                 println(s"Service:    ${asHex(sid)}")
                 controller.services.get(sid) match {
@@ -111,12 +118,12 @@ object Main {
                             case Some(action) =>
                                 action.execute(dt) match {
                                     case DataResponse(data) =>
-                                        buffer.rewind()
-                                        buffer.put((sid + ObdBridge.PositiveResponseBase).toByte)
-                                        buffer.put(data)
-                                        buffer.rewind()
+                                        writeBuffer.clear()
+                                        writeBuffer.put((sid + ObdBridge.PositiveResponseBase).toByte)
+                                        writeBuffer.put(data)
+                                        writeBuffer.flip()
 
-                                        ch.write(buffer, 0, data.length + 1)
+                                        ch.write(writeBuffer)
                                     case Error(msg) =>
                                         println(s"Action failed: $msg")
                                 }
@@ -127,11 +134,9 @@ object Main {
                         println("unknown service!")
                 }
             case n if n > 1 =>
-                val sid = buffer.get(offset)
-                val pids = Array.ofDim[Byte](length - 1)
-                buffer.position(offset + 1)
+                val sid = buffer.get()
+                val pids = Array.ofDim[Byte](buffer.remaining())
                 buffer.get(pids)
-                buffer.rewind()
                 println(s"Controller: ${controller.name}")
                 println(s"Service:    ${asHex(sid)}")
                 println(s"Parameters: ${hexDump(pids)}")
@@ -144,25 +149,29 @@ object Main {
                             println(s"unknown pids: $unknownPids")
                         } else {
                             val successResponseSid = (sid + ObdBridge.PositiveResponseBase).toByte
+                            writeBuffer.clear()
+                            writeBuffer.put(successResponseSid)
                             val responses = pids
                                 .map(_.toInt)
-                                .foldLeft[ActionResult](DataResponse(Array(successResponseSid))) {
-                                    case (DataResponse(data), pid) =>
+                                .foldLeft[Either[ActionResult, ByteBuffer]](Right(writeBuffer)) {
+                                    case (Right(buf), pid) =>
                                         handleRequest(controller, service, pid, dt) match {
-                                            case DataResponse(newData) => DataResponse(data ++ (pid.toByte +: newData))
-                                            case err => err
+                                            case DataResponse(newData) =>
+                                                buf.put(pid.toByte)
+                                                buf.put(newData)
+                                                Right(buf)
+                                            case err => Left(err)
                                         }
                                     case (err, _) => err
                                 }
                             responses match {
-                                case DataResponse(data) =>
-                                    buffer.rewind()
-                                    buffer.put(data)
-                                    buffer.rewind()
-                                    ch.write(buffer, 0, data.length)
-                                case Error(err) =>
+                                case Right(data) =>
+                                    data.flip()
+                                    ch.write(data)
+                                case Left(Error(err)) =>
                                     println(s"One of the actions failed: $err")
-
+                                case _ =>
+                                    println(s"One of the actions failed for an unknown reason!")
                             }
                         }
                     case None =>
@@ -189,5 +198,13 @@ object Main {
             else set
         }.toByteArray)
     }
+
+    def loadAction(eval: Eval)(action: ActionSpec): Option[Action] = {
+        action.explicit.flatMap(loadExplicitAction)
+            .orElse(action.generator.map(new ParameterAction(eval, _)))
+    }
+
+    def loadExplicitAction(className: String): Option[Action] =
+        Try(classOf[Action].cast(Class.forName(className).getConstructor().newInstance())).toOption
 
 }
