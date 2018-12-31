@@ -8,7 +8,7 @@ import java.util.concurrent.ThreadFactory
 import com.twitter.util.Eval
 import net.jcazevedo.moultingyaml._
 import tel.schich.javacan.IsotpAddress.SFF_FUNCTIONAL_ADDRESS
-import tel.schich.javacan.{CanChannels, CanDevice, IsotpAddress, IsotpCanChannel}
+import tel.schich.javacan._
 import tel.schich.javacan.select.JavaCANSelectorProvider
 import tel.schich.javacan.util.IsotpListener
 import tel.schich.obd4s.ObdBridge
@@ -86,7 +86,7 @@ object Main {
         val listener = new IsotpListener(threads, provider, ofMinutes(1))
 
         controllers.values.foreach { controller =>
-            listener.addChannel(controller.channel, handleRequest(controller.name, controller, t0))
+            listener.addChannel(controller.channel, handleRequest(s"ECU=${controller.name}", controller, t0))
         }
 
         listener.addChannel(functionalChannel, (_, buf) => {
