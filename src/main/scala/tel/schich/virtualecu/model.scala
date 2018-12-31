@@ -2,6 +2,7 @@ package tel.schich.virtualecu
 
 import com.twitter.util.Eval
 import net.jcazevedo.moultingyaml._
+import tel.schich.javacan.IsotpCanChannel
 
 case class EmulationSpec(controllers: Map[String, ECUSpec])
 case class ECUSpec(name: String, services: Map[String, ServiceSpec])
@@ -22,7 +23,7 @@ object EmulationConfigurationProtocol extends DefaultYamlProtocol {
 
 }
 
-case class ECU(name: String, receiveAddress: Int, services: Map[Int, Service])
+case class ECU(name: String, receiveAddress: Int, services: Map[Int, Service], channel: IsotpCanChannel)
 case class Service(name: String, sid: Int, parameters: Map[Int, Parameter], action: Option[Action])
 case class Parameter(name: String, id: Int, action: Action)
 

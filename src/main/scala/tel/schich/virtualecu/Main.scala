@@ -8,7 +8,7 @@ import java.util.concurrent.ThreadFactory
 import com.twitter.util.Eval
 import net.jcazevedo.moultingyaml._
 import tel.schich.javacan.IsotpAddress.SFF_FUNCTIONAL_ADDRESS
-import tel.schich.javacan.{CanChannels, IsotpAddress, IsotpCanChannel}
+import tel.schich.javacan.{CanChannels, CanDevice, IsotpAddress, IsotpCanChannel}
 import tel.schich.javacan.select.JavaCANSelectorProvider
 import tel.schich.javacan.util.IsotpBroker
 import tel.schich.obd4s.ObdBridge
@@ -31,7 +31,7 @@ object Main {
                 if (!Files.exists(p) || !Files.isReadable(p)) {
                     println("File not found or not readable!")
                 } else {
-                    startEmulation(interfaceName, p)
+                    startEmulation(CanDevice.lookup(interfaceName), p)
                 }
             case _ =>
                 println("Usage: <can interface> <config path>")
@@ -48,7 +48,7 @@ object Main {
         Integer.parseUnsignedInt(n, 16)
     }
 
-    def startEmulation(interfaceName: String, conf: Path): Unit = {
+    def startEmulation(device: CanDevice, conf: Path): Unit = {
         val eval = new Eval()
         val emulationSpec = loadConf(conf)
         val t0 = System.currentTimeMillis()
@@ -74,32 +74,34 @@ object Main {
                         val service = Service(serviceSpec.name, sid, parameters, serviceSpec.action.flatMap(actionLoader))
                         (sid, service)
                 }
-                (addr, ECU(ecuSpec.name, addr, services))
+                val ch = CanChannels.newIsotpChannel(device, addr, IsotpAddress.returnAddress(addr))
+                ch.configureBlocking(false)
+                (addr, ECU(ecuSpec.name, addr, services, ch))
         }
 
         val threadGroup = new ThreadGroup("virtual-ecu-worker-threads")
         val threads: ThreadFactory = r => new Thread(threadGroup, r, "virtual-ecu-worker")
-        val functionalChannel = CanChannels.newIsotpChannel(interfaceName, SFF_FUNCTIONAL_ADDRESS, 0x7FF)
+        val functionalChannel = CanChannels.newIsotpChannel(device, SFF_FUNCTIONAL_ADDRESS, 0x7FF)
         val provider = new JavaCANSelectorProvider()
         val broker = new IsotpBroker(threads, provider, ofMinutes(1))
 
-        val controllerChannels = controllers.mapValues { controller =>
-            val ch = CanChannels.newIsotpChannel(interfaceName, controller.receiveAddress, IsotpAddress.returnAddress(controller.receiveAddress))
-            broker.addChannel(ch, handleRequest(controller, t0))
-            ch
+        controllers.values.foreach { controller =>
+            broker.addChannel(controller.channel, handleRequest(controller.name, controller, t0))
         }
 
         broker.addChannel(functionalChannel, (_, buf) => {
             println("Received functional request!")
             for ((addr, controller) <- controllers) {
-                handleRequest(controller, t0)(controllerChannels(addr), buf)
+                handleRequest("functional", controller, t0)(controllers(addr).channel, buf)
             }
         })
 
         broker.start()
     }
 
-    def handleRequest(controller: ECU, t0: Long)(ch: IsotpCanChannel, buffer: ByteBuffer): Unit = {
+    def handleRequest(name: String, controller: ECU, t0: Long)(ch: IsotpCanChannel, buffer: ByteBuffer): Unit = {
+
+        println(s"######### $name")
 
         val dt = System.currentTimeMillis() - t0
 
