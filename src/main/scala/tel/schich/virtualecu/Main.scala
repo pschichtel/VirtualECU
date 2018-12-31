@@ -83,20 +83,20 @@ object Main {
         val threads: ThreadFactory = r => new Thread(threadGroup, r, "virtual-ecu-worker")
         val functionalChannel = CanChannels.newIsotpChannel(device, SFF_FUNCTIONAL_ADDRESS, 0x7FF)
         val provider = new JavaCANSelectorProvider()
-        val broker = new IsotpListener(threads, provider, ofMinutes(1))
+        val listener = new IsotpListener(threads, provider, ofMinutes(1))
 
         controllers.values.foreach { controller =>
-            broker.addChannel(controller.channel, handleRequest(controller.name, controller, t0))
+            listener.addChannel(controller.channel, handleRequest(controller.name, controller, t0))
         }
 
-        broker.addChannel(functionalChannel, (_, buf) => {
+        listener.addChannel(functionalChannel, (_, buf) => {
             println("Received functional request!")
             for (controller <- controllers.values) {
                 handleRequest("functional", controller, t0)(controller.channel, buf)
             }
         })
 
-        broker.start()
+        listener.start()
     }
 
     def handleRequest(name: String, controller: ECU, t0: Long)(ch: IsotpCanChannel, buffer: ByteBuffer): Unit = {
