@@ -1,6 +1,8 @@
 package tel.schich.virtualecu
 
+import scala.annotation.tailrec
 import scala.concurrent.duration.FiniteDuration
+import scala.reflect.ClassTag
 import scala.util.Random
 
 object PreFunctions {
@@ -37,6 +39,10 @@ abstract class Functions[U] {
 
     def shift(n: Double): F = _ + n
 
+    def min(n: Double): F = math.min(_, n)
+    def max(n: Double): F = math.max(_, n)
+    def clamp(low: Double, high: Double): F = v => math.max(low, math.min(high, v))
+
     def lowCut(n: Double): F = v => if (v < n) n else v
     def lowPass(n: Double): F = v => if (v < n) v else n
     def highCut(n: Double): F = v => if (v > n) n else v
@@ -54,6 +60,8 @@ abstract class Functions[U] {
         x => 2 * ((x / p) - math.floor(0.5 + (x / p)))
     }
 
+    def zero: F = _ => 0.0
+    def one: F = _ => 1.0
     def constant[T](c: T): Double => T = _ => c
 
     def linear(period: U): F = linear(1, period)
@@ -149,6 +157,104 @@ abstract class Functions[U] {
     def random(from: Double, to: Double): F =
         _ => from + (rnd.nextDouble() * (to - from))
 
+    def select(selector: F, otherwise: F, cases: F*): F = { v =>
+        val i = selector(v).toInt
+        if (cases.isDefinedAt(i)) cases(i)(v)
+        else otherwise(v)
+    }
+
+    def selectConstant(selector: F, otherwise: Double, cases: Double*): F = { v =>
+        val i = selector(v).toInt
+        if (cases.isDefinedAt(i)) cases(i)
+        else otherwise
+    }
+
+    def selectPartial(selector: F, cases: F*): F = { v =>
+        cases(selector(v).toInt)(v)
+    }
+
+    def selectPartialConstant(selector: F, cases: Double*): F = { v =>
+        cases(selector(v).toInt)
+    }
+
+    def choose(choices: Double*): F = {
+        _ => choices(rnd.nextInt(choices.length))
+    }
+
+    def chooseWeighted(choices: (Double, Double)*): F = {
+        val selector = Util.chooseWeighted(rnd.nextDouble, choices.toIndexedSeq)
+
+        _ => selector()
+    }
+
+    def accumulate(start: Double, f: F): F = {
+        var acc = start
+
+        v => {
+            acc += f(v)
+            acc
+        }
+    }
+
+    def randomWalk(start: Double, lower: Double, upper: Double, actions: (Double, Double)*): F = {
+        if (start < lower || start > upper) {
+            throw new IllegalArgumentException("start not within range!")
+        }
+        var acc = start
+        val selector = Util.chooseWeighted(rnd.nextDouble, actions.toIndexedSeq)
+
+        v => {
+            val next = acc + selector()
+            if (next < lower || next > upper) acc
+            else {
+                acc = next
+                next
+            }
+        }
+    }
+
+    def randomWalk(start: Double, actions: (Double, Double)*): F = {
+        var acc = start
+        val selector = Util.chooseWeighted(rnd.nextDouble, actions.toIndexedSeq)
+
+        _ => {
+            acc = acc + selector()
+            acc
+        }
+    }
+}
+
+object Util {
+
+    def cumulativeDensity[N](weights: IndexedSeq[N])(implicit n: Numeric[N], classTag: ClassTag[N]): Array[N] = {
+        val cdf = Array.ofDim[N](weights.length)
+        var prev = n.zero
+        for (i <- cdf.indices) {
+            prev = n.plus(prev, weights(i))
+            cdf(i) = prev
+        }
+        cdf
+    }
+
+    def chooseWeighted[N, T](rnd: () => N, choices: IndexedSeq[(N, T)])(implicit n: Numeric[N], classTag: ClassTag[N]): () => T = {
+        val (weights, values) = choices.unzip
+        val cdf = cumulativeDensity(weights)
+        val sum = cdf.last
+
+        @tailrec
+        def binaryFindSelectedValue(values: IndexedSeq[T], cdf: Array[N], lower: Int, upper: Int, selection: N): T = {
+            val mid = (lower + upper) / 2
+
+            val lowerEdge = if (mid == 0) n.zero else cdf(mid - 1)
+            val upperEdge = cdf(mid)
+
+            if (n.lt(selection, lowerEdge)) binaryFindSelectedValue(values, cdf, lower, mid, selection)
+            else if (n.gteq(selection, upperEdge)) binaryFindSelectedValue(values, cdf, mid, upper, selection)
+            else values(mid)
+        }
+
+        () => binaryFindSelectedValue(values, cdf, 0, values.length, n.times(rnd(), sum))
+    }
 }
 
 object Quantizers {
