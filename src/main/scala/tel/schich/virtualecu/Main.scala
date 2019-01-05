@@ -186,11 +186,13 @@ object Main {
             handlePidSupportRequest(controller, service, pid)
         } else {
             val parameter = service.parameters(pid)
+            println(s"PID request: ${parameter.name}")
             parameter.action.execute(dt)
         }
     }
 
     def handlePidSupportRequest(controller: ECU, service: Service, pid: Int): ActionResult = {
+        println(s"Support PID request: ${pid.toHexString.reverse.padTo(2, '0').reverse}")
         DataResponse((1 to ObdBridge.SupportRangeSize).foldLeft(BigInt(0)) { (set, n) =>
             if (service.parameters.contains(pid + n)) set | (1 << (32 - n))
             else set

@@ -11,7 +11,22 @@ controllers:
             name: Coolant Temperature
             action:
               generator: "add(linear(1, 8.minutes), gaussianRandom(-0.001, 0.001)) andThen lowCut(-40) andThen combined(90.0, scale, highCut) andThen shift(40) andThen unsignedInteger(1)"
-              explicit: tel.schich.virtualecu.TestAction
+          "0C":
+            name: Engine RPM
+            action:
+              generator: "sum(saw(30.seconds) andThen shift(1) andThen scale(0.5), sine(3000.millis) andThen shift(1) andThen scale(0.5), sine(1500.millis) andThen shift(1) andThen scale(0.5)) andThen scale(2500) andThen scale(0.25) andThen unsignedInteger(2)"
+          "0D":
+            name: Vehicle Speed
+            action:
+              generator: "multiply(sum(saw(30.seconds) andThen shift(1) andThen scale(0.5), sine(3000.millis) andThen shift(1) andThen scale(0.5), sine(1500.millis) andThen shift(1) andThen scale(0.5)) andThen scale(2500), selectPartialConstant(randomWalk(0, 0, 6, 1.0 -> -1.0, 1000.0 -> 0.0, 1.0 -> 1.0), 0, 1.0/4.31, 1.0/2.44, 1.0/1.35, 1.0/0.94, 1.0/0.82, 1.0/0.7)) andThen scale(1.0/(math.Pi * 0.508 * 3.6 * 3.5)) andThen unsignedInteger(1)"
+          "11":
+            name: Throttle Position
+            action:
+              generator: "sine(30.seconds) andThen shift(1.0) andThen scale(0.5) andThen scale(255.0) andThen unsignedInteger(1)"
+          "2F":
+            name: Fual Tank Level
+            action:
+              generator: "saw(5.minutes) andThen negate andThen shift(1) andThen scale(0.5) andThen scale(255.0) andThen unsignedInteger(1)"
       "09":
         name: Metadata?
         parameters:
