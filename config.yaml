@@ -26,7 +26,7 @@ controllers:
           "2F":
             name: Fual Tank Level
             action:
-              generator: "saw(5.minutes) andThen negate andThen shift(1) andThen scale(0.5) andThen scale(255.0) andThen unsignedInteger(1)"
+              generator: "saw(2.days) andThen negate andThen shift(1) andThen scale(0.5) andThen scale(255.0) andThen unsignedInteger(1)"
       "09":
         name: Metadata?
         parameters:
