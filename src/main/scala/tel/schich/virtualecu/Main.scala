@@ -87,13 +87,13 @@ object Main {
         val listener = new IsotpListener(threads, provider, ofMinutes(1))
 
         controllers.values.foreach { controller =>
-            listener.addChannel(controller.channel, handleRequest(s"ECU=${controller.name}", controller, t0))
+            listener.addChannel(controller.channel, handleRequest(controller.name, controller, t0))
         }
 
         listener.addChannel(functionalChannel, (_, buf) => {
             println("Received functional request!")
             for (controller <- controllers.values) {
-                handleRequest("functional", controller, t0)(controller.channel, buf)
+                handleRequest("all", controller, t0)(controller.channel, buf)
             }
         })
 
@@ -102,7 +102,8 @@ object Main {
 
     def handleRequest(name: String, controller: ECU, t0: Long)(ch: IsotpCanChannel, buffer: ByteBuffer): Unit = {
 
-        println(s"######### $name")
+        println("#######################")
+        println(s"ECU: $name")
 
         val dt = System.currentTimeMillis() - t0
 
