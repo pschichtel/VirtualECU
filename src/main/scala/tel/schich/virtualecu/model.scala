@@ -3,6 +3,8 @@ package tel.schich.virtualecu
 import com.twitter.util.Eval
 import net.jcazevedo.moultingyaml._
 import tel.schich.javacan.IsotpCanChannel
+import tel.schich.obd4s.obd.ObdCauses.GeneralReject
+import tel.schich.obd4s.{Cause, SimpleCause}
 
 case class EmulationSpec(controllers: Map[String, ECUSpec])
 case class ECUSpec(name: String, services: Map[String, ServiceSpec])
@@ -29,7 +31,7 @@ case class Parameter(name: String, id: Int, action: Action)
 
 sealed trait ActionResult
 final case class DataResponse(data: Array[Byte]) extends ActionResult
-final case class Error(message: String) extends ActionResult
+final case class Error(cause: Cause) extends ActionResult
 
 trait Action {
     def execute(t: Long): ActionResult
@@ -53,13 +55,13 @@ class ParameterAction(eval: Eval, code: String) extends Action {
             DataResponse(f(t))
         } catch {
             case e: Exception =>
-                Error(e.getLocalizedMessage)
+                Error(SimpleCause(e.getLocalizedMessage))
         }
     }
 }
 
 object NoOpAction extends Action {
-    override def execute(t: Long): ActionResult = Error("noop")
+    override def execute(t: Long): ActionResult = Error(GeneralReject)
 }
 
 

@@ -11,8 +11,9 @@ import tel.schich.javacan.IsotpAddress.SFF_FUNCTIONAL_ADDRESS
 import tel.schich.javacan._
 import tel.schich.javacan.select.JavaCANSelectorProvider
 import tel.schich.javacan.util.IsotpListener
-import tel.schich.obd4s.ObdBridge
+import tel.schich.obd4s.{Cause, Identified, ObdBridge}
 import tel.schich.obd4s.ObdHelper.{asHex, hexDump}
+import tel.schich.obd4s.obd.ObdCauses
 
 import scala.io.Source
 import scala.util.Try
@@ -126,9 +127,11 @@ object Main {
                                         println(s"Action failed: $msg")
                                 }
                             case None =>
+                                writeErrorResponse(ch, sid, ObdCauses.ServiceNotSupported)
                                 println("service cannot be executed directly.")
                         }
                     case None =>
+                        writeErrorResponse(ch, sid, ObdCauses.ServiceNotSupported)
                         println("unknown service!")
                 }
             case n if n > 1 =>
@@ -144,6 +147,7 @@ object Main {
                         val unknownPids = (pids.map(_.toInt).toSet -- service.parameters.keySet)
                             .filter(p => (p % ObdBridge.SupportRangeSize) != 0)
                         if (unknownPids.nonEmpty) {
+                            writeErrorResponse(ch, sid, ObdCauses.SubFunctionNotSupportedInvalidFormat)
                             println(s"unknown pids: $unknownPids")
                         } else {
                             val successResponseSid = (sid + ObdBridge.PositiveResponseBase).toByte
@@ -166,19 +170,33 @@ object Main {
                                 case Right(data) =>
                                     data.flip()
                                     ch.write(data)
+                                case Left(Error(cause: Identified)) if ObdCauses.values.contains(cause) =>
+                                    writeErrorResponse(ch, sid, cause)
                                 case Left(Error(err)) =>
-                                    println(s"One of the actions failed: $err")
+                                    writeErrorResponse(ch, sid, ObdCauses.RequestSequenceError)
+                                    println(s"One of the actions failed: ${err.reason}")
                                 case _ =>
+                                    writeErrorResponse(ch, sid, ObdCauses.GeneralReject)
                                     println(s"One of the actions failed for an unknown reason!")
                             }
                         }
                     case None =>
+                        writeErrorResponse(ch, sid, ObdCauses.ServiceNotSupported)
                         println("Unknown service!")
                 }
             case _ =>
                 println("Received an empty payload...")
         }
 
+    }
+
+    private def writeErrorResponse(ch: IsotpCanChannel, sid: Byte, cause: Cause with Identified): Unit = {
+        writeBuffer.clear()
+        writeBuffer.put(ObdCauses.NegativeResponseCode)
+        writeBuffer.put(sid)
+        writeBuffer.put(cause.id.toByte)
+        writeBuffer.flip()
+        ch.write(writeBuffer)
     }
 
     def handleRequest(controller: ECU, service: Service, pid: Int, dt: Long): ActionResult = {
@@ -191,12 +209,33 @@ object Main {
         }
     }
 
+    def isSupportPidNeeded(service: Service, pid: Int): Boolean = {
+        if (pid % ObdBridge.SupportRangeSize != 0) false
+        else service.parameters.keys.exists(_ > pid)
+    }
+
     def handlePidSupportRequest(controller: ECU, service: Service, pid: Int): ActionResult = {
         println(s"Support PID request: ${pid.toHexString.reverse.padTo(2, '0').reverse}")
-        DataResponse((1 to ObdBridge.SupportRangeSize).foldLeft(BigInt(0)) { (set, n) =>
-            if (service.parameters.contains(pid + n)) set | (1 << (32 - n))
-            else set
-        }.toByteArray)
+        if (isSupportPidNeeded(service, pid)) {
+            val mask = (1 to ObdBridge.SupportRangeSize).foldLeft(BigInt(0)) { (set, n) =>
+                if (service.parameters.contains(pid + n)) set | (1 << (32 - n))
+                else set
+            }
+            val finalMask =
+                if (isSupportPidNeeded(service, pid + ObdBridge.SupportRangeSize)) mask | 1
+                else mask
+            val intBytes = finalMask.toByteArray
+            val result =
+                if (intBytes.length == 4) intBytes
+                else {
+                    val resultBuf = Array.ofDim[Byte](4)
+                    System.arraycopy(intBytes, 0, resultBuf, resultBuf.length - intBytes.length, intBytes.length)
+                    resultBuf
+                }
+            DataResponse(result)
+        } else {
+            Error(ObdCauses.RequestSequenceError)
+        }
     }
 
     def loadAction(eval: Eval)(action: ActionSpec): Option[Action] = {
