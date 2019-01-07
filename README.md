@@ -2,7 +2,7 @@
 
 This project implements a ECU simulator completely in software. The simulated communication is initially limited to standardized OBD-II requests, but can easily extended to support additional standards or even non-standard protocols.
 
-Its CAN and ISOTP layers are powered by the [JavaCAN](https://github.com/pschichtel/JavaCAN) project using the Linux kernel's SocketCAN API. The OBD communication protocol implementation is provided by [obd4s](https://github.com/pschichtel/obd4s), a Scala library build on top of JavaCAN to provide proper standards compliant OBD-II communication.
+Its CAN and ISOTP layers are powered by the [JavaCAN](https://github.com/pschichtel/JavaCAN) project using the Linux kernel's SocketCAN API. The OBD communication protocol implementation is provided by [obd4s](https://github.com/pschichtel/obd4s), a Scala library built on top of JavaCAN to provide proper standards compliant OBD-II communication.
 
 ## What works so far
 
