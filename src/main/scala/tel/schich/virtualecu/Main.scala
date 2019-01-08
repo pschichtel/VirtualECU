@@ -9,7 +9,7 @@ import com.twitter.util.Eval
 import net.jcazevedo.moultingyaml._
 import tel.schich.javacan.IsotpAddress.SFF_FUNCTIONAL_ADDRESS
 import tel.schich.javacan._
-import tel.schich.javacan.select.JavaCANSelectorProvider
+import tel.schich.javacan.select.ExtensibleSelectorProvider
 import tel.schich.javacan.util.IsotpListener
 import tel.schich.obd4s.{Cause, Identified, ObdBridge}
 import tel.schich.obd4s.ObdHelper.{asHex, hexDump}
@@ -32,7 +32,7 @@ object Main {
                 if (!Files.exists(p) || !Files.isReadable(p)) {
                     println("File not found or not readable!")
                 } else {
-                    startEmulation(CanDevice.lookup(interfaceName), p)
+                    startEmulation(NetworkDevice.lookup(interfaceName), p)
                 }
             case _ =>
                 println("Usage: <can interface> <config path>")
@@ -49,7 +49,7 @@ object Main {
         Integer.parseUnsignedInt(n, 16)
     }
 
-    def startEmulation(device: CanDevice, conf: Path): Unit = {
+    def startEmulation(device: NetworkDevice, conf: Path): Unit = {
         val eval = new Eval()
         val emulationSpec = loadConf(conf)
         val t0 = System.currentTimeMillis()
@@ -83,7 +83,7 @@ object Main {
         val threadGroup = new ThreadGroup("virtual-ecu-worker-threads")
         val threads: ThreadFactory = r => new Thread(threadGroup, r, "virtual-ecu-worker")
         val functionalChannel = CanChannels.newIsotpChannel(device, SFF_FUNCTIONAL_ADDRESS, 0x7FF)
-        val provider = new JavaCANSelectorProvider()
+        val provider = new ExtensibleSelectorProvider()
         val listener = new IsotpListener(threads, provider, ofMinutes(1))
 
         controllers.values.foreach { controller =>

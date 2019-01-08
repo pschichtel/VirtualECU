@@ -10,6 +10,8 @@ publishMavenStyle := true
 
 resolvers += Resolver.mavenLocal
 
+scalacOptions ++= Seq("-unchecked", "-deprecation")
+
 libraryDependencies ++= Seq(
     "tel.schich" %% "obd4s" % "1.0.0-SNAPSHOT",
     "com.beachape" %% "enumeratum" % "1.5.13",   // nicer enums

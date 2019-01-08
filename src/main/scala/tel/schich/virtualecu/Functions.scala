@@ -182,7 +182,7 @@ abstract class Functions[U] {
     }
 
     def chooseWeighted(choices: (Double, Double)*): F = {
-        val selector = Util.chooseWeighted(rnd.nextDouble, choices.toIndexedSeq)
+        val selector = Util.chooseWeighted(() => rnd.nextDouble(), choices.toIndexedSeq)
 
         _ => selector()
     }
@@ -201,7 +201,7 @@ abstract class Functions[U] {
             throw new IllegalArgumentException("start not within range!")
         }
         var acc = start
-        val selector = Util.chooseWeighted(rnd.nextDouble, actions.toIndexedSeq)
+        val selector = Util.chooseWeighted(() => rnd.nextDouble(), actions.toIndexedSeq)
 
         v => {
             val next = acc + selector()
@@ -215,7 +215,7 @@ abstract class Functions[U] {
 
     def randomWalk(start: Double, actions: (Double, Double)*): F = {
         var acc = start
-        val selector = Util.chooseWeighted(rnd.nextDouble, actions.toIndexedSeq)
+        val selector = Util.chooseWeighted(() => rnd.nextDouble(), actions.toIndexedSeq)
 
         _ => {
             acc = acc + selector()
