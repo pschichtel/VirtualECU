@@ -97,7 +97,7 @@ object Main {
             }
         })
 
-        listener.start()
+        println("Virtual ECUs started!")
     }
 
     def handleRequest(name: String, controller: ECU, t0: Long)(ch: IsotpCanChannel, buffer: ByteBuffer): Unit = {
