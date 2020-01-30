@@ -1,6 +1,5 @@
 package tel.schich.virtualecu
 
-import com.twitter.util.Eval
 import tel.schich.javacan.IsotpCanChannel
 import tel.schich.obd4s.obd.ObdCauses.GeneralReject
 import tel.schich.obd4s.{Cause, SimpleCause}
@@ -17,7 +16,7 @@ trait Action {
     def execute(t: Long): ActionResult
 }
 
-class ParameterAction(eval: Eval, code: String) extends Action {
+class ParameterAction(compiler: TimeSeriesCompiler, code: String) extends Action {
 
     private val fullCode =
         s"""
@@ -28,7 +27,7 @@ class ParameterAction(eval: Eval, code: String) extends Action {
           |$code
         """.stripMargin
 
-    private val f: Double => Array[Byte] = eval(fullCode)
+    private val f: TimeSeriesScript = compiler(fullCode)
 
     override def execute(t: Long): ActionResult = {
         try {

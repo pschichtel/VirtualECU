@@ -24,7 +24,7 @@ controllers:
             action:
               generator: "sine(30.seconds) andThen shift(1.0) andThen scale(0.5) andThen scale(255.0) andThen unsignedInteger(1)"
           "2F":
-            name: Fual Tank Level
+            name: Fuel Tank Level
             action:
               generator: "saw(2.days) andThen negate andThen shift(1) andThen scale(0.5) andThen scale(255.0) andThen unsignedInteger(1)"
       "09":

@@ -5,7 +5,6 @@ import java.nio.file.{Files, Path, Paths}
 import java.time.Duration.ofMinutes
 import java.util.concurrent.ThreadFactory
 
-import com.twitter.util.Eval
 import net.jcazevedo.moultingyaml._
 import tel.schich.javacan.IsotpAddress.SFF_FUNCTIONAL_ADDRESS
 import tel.schich.javacan._
@@ -16,7 +15,9 @@ import tel.schich.obd4s.ObdHelper.{asHex, hexDump}
 import tel.schich.obd4s.obd.ObdCauses
 
 import scala.io.Source
-import scala.util.Try
+import scala.tools.reflect.ToolBox
+import scala.reflect.runtime.currentMirror
+import scala.util.{Failure, Success, Try, Using}
 
 object Main {
 
@@ -32,7 +33,13 @@ object Main {
                 if (!Files.exists(p) || !Files.isReadable(p)) {
                     println("File not found or not readable!")
                 } else {
-                    startEmulation(NetworkDevice.lookup(interfaceName), p)
+                    loadConf(p) match {
+                        case Success(spec) =>
+                            startEmulation(NetworkDevice.lookup(interfaceName), spec)
+                        case Failure(e) =>
+                        System.err.println("Failed to load the spec:")
+                        e.printStackTrace(System.err)
+                    }
                 }
             case _ =>
                 println("Usage: <can interface> <config path>")
@@ -40,18 +47,26 @@ object Main {
 
     }
 
-    def loadConf(path: Path): EmulationSpec = {
+    def loadConf(path: Path): Try[EmulationSpec] = {
         import EmulationConfigurationProtocol._
-        Source.fromFile(path.toFile, "UTF-8").mkString.parseYaml.convertTo[EmulationSpec]
+        Using(Source.fromFile(path.toFile, "UTF-8"))(_.mkString.parseYaml.convertTo[EmulationSpec])
     }
 
     def parseUnsignedHex(n: String): Int = {
         Integer.parseUnsignedInt(n, 16)
     }
 
-    def startEmulation(device: NetworkDevice, conf: Path): Unit = {
-        val eval = new Eval()
-        val emulationSpec = loadConf(conf)
+    def compileScript(code: String): TimeSeriesScript = {
+        val toolbox = currentMirror.mkToolBox()
+
+        val result = toolbox.eval(toolbox.parse(code))
+        result match {
+            case script: TimeSeriesScript => script
+            case _ => throw new IllegalArgumentException("Failed to compile script!")
+        }
+    }
+
+    def startEmulation(device: NetworkDevice, emulationSpec: EmulationSpec): Unit = {
         val t0 = System.currentTimeMillis()
 
         val controllers = emulationSpec.controllers.map {
@@ -62,7 +77,7 @@ object Main {
                     case (hexSid, serviceSpec) =>
                         val sid = parseUnsignedHex(hexSid)
 
-                        val actionLoader = loadAction(eval) _
+                        val actionLoader = loadAction(compileScript) _
 
                         val parameters = serviceSpec.parameters.map {
                             case (hexPid, parameterSpec) =>
@@ -239,9 +254,9 @@ object Main {
         }
     }
 
-    def loadAction(eval: Eval)(action: ActionSpec): Option[Action] = {
+    def loadAction(compiler: TimeSeriesCompiler)(action: ActionSpec): Option[Action] = {
         action.explicit.flatMap(loadExplicitAction)
-            .orElse(action.generator.map(new ParameterAction(eval, _)))
+            .orElse(action.generator.map(new ParameterAction(compiler, _)))
     }
 
     def loadExplicitAction(className: String): Option[Action] =

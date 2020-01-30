@@ -4,7 +4,7 @@ organization := "tel.schich"
 
 version := "1.0.0-SNAPSHOT"
 
-scalaVersion := "2.12.8"
+scalaVersion := "2.13.1"
 
 publishMavenStyle := true
 
@@ -14,7 +14,8 @@ scalacOptions ++= Seq("-unchecked", "-deprecation")
 
 libraryDependencies ++= Seq(
     "tel.schich" %% "obd4s" % "1.0.0-SNAPSHOT" changing(),
-    "com.beachape" %% "enumeratum" % "1.5.13",   // nicer enums
-    "net.jcazevedo" %% "moultingyaml" % "0.4.0", // yaml parser
-    "com.twitter" %% "util-eval" % "6.43.0",
+    "com.beachape" %% "enumeratum" % "1.5.15",   // nicer enums
+    "net.jcazevedo" %% "moultingyaml" % "0.4.1", // yaml parser
+    "org.scala-lang" % "scala-reflect" % scalaVersion.value,
+    "org.scala-lang" % "scala-compiler" % scalaVersion.value,
 )

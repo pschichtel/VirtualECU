@@ -52,7 +52,7 @@ abstract class Functions[U] {
 
     def negate: F = -_
 
-    def signum: F = _.signum
+    def signum: F = _.sign
 
     def saw(period: U): F = {
         val p = toDouble(period)
@@ -203,7 +203,7 @@ abstract class Functions[U] {
         var acc = start
         val selector = Util.chooseWeighted(() => rnd.nextDouble(), actions.toIndexedSeq)
 
-        v => {
+        _ => {
             val next = acc + selector()
             if (next < lower || next > upper) acc
             else {
@@ -259,7 +259,7 @@ object Util {
 
 object Quantizers {
 
-    def bigInt(v: Double): BigInt = BigDecimal(v).toBigInt()
+    def bigInt(v: Double): BigInt = BigDecimal(v).toBigInt
 
     def unsignedInteger(size: Int)(v: Double): Array[Byte] =
         bigDecimalToArray(BigDecimal(v).max(0), size)
@@ -268,7 +268,7 @@ object Quantizers {
         bigDecimalToArray(BigDecimal(v), size)
 
     private def bigDecimalToArray(i: BigDecimal, size: Int): Array[Byte] = {
-        val allBytes = i.toBigInt().toByteArray
+        val allBytes = i.toBigInt.toByteArray
 
         if (size == allBytes.length) allBytes
         else allBytes.slice(allBytes.length - size, allBytes.length)
