@@ -31,7 +31,7 @@ class ParameterAction(compiler: TimeSeriesCompiler, code: String) extends Action
 
     override def execute(t: Long): ActionResult = {
         try {
-            DataResponse(f(t))
+            DataResponse(f(t.toDouble))
         } catch {
             case e: Exception =>
                 Error(SimpleCause(e.getLocalizedMessage))

@@ -13,7 +13,7 @@ trait Domain[T] {
 }
 
 object FiniteDurationFunctions extends Functions[FiniteDuration] {
-    override def toDouble(v: FiniteDuration): Double = v.toMillis
+    override def toDouble(v: FiniteDuration): Double = v.toMillis.toDouble
 }
 
 case class Rate[U](unit: Double, per: U)
@@ -31,7 +31,7 @@ abstract class Functions[U] {
     def advance(offset: Double): F = _ + offset
     def advance(offset: U): F = advance(toDouble(offset))
 
-    def round: F = _.round
+    def round: F = _.round.toDouble
     def floor: F = _.floor
     def ceiling: F = _.ceil
 

@@ -61,7 +61,7 @@ object Main {
 
         val result = toolbox.eval(toolbox.parse(code))
         result match {
-            case script: TimeSeriesScript => script
+            case script: TimeSeriesScript @unchecked => script
             case _ => throw new IllegalArgumentException("Failed to compile script!")
         }
     }

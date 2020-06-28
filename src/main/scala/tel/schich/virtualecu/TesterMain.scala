@@ -78,7 +78,7 @@ object TesterMain {
 
         val writer = Files.newBufferedWriter(outputPath, US_ASCII, CREATE, TRUNCATE_EXISTING, WRITE)
         for (t <- 0L until duration.toMillis) {
-            val v = f(t)
+            val v = f(t.toDouble)
             writer.write(s"$t,$v\n")
         }
         writer.close()
