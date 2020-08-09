@@ -13,7 +13,7 @@ resolvers += Resolver.mavenLocal
 scalacOptions ++= Seq("-unchecked", "-deprecation")
 
 libraryDependencies ++= Seq(
-    "tel.schich" %% "obd4s" % "1.0.0-SNAPSHOT" changing(),
+    "tel.schich" %% "obd4s" % "1.0.0",
     "com.beachape" %% "enumeratum" % "1.5.15",   // nicer enums
     "net.jcazevedo" %% "moultingyaml" % "0.4.1", // yaml parser
     "org.scala-lang" % "scala-reflect" % scalaVersion.value,
