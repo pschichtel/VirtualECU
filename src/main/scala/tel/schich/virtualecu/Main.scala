@@ -8,7 +8,7 @@ import java.util.concurrent.ThreadFactory
 import net.jcazevedo.moultingyaml._
 import tel.schich.javacan.IsotpAddress.SFF_FUNCTIONAL_ADDRESS
 import tel.schich.javacan._
-import tel.schich.javacan.select.ExtensibleSelectorProvider
+import tel.schich.javacan.linux.epoll.EPollSelector
 import tel.schich.javacan.util.IsotpListener
 import tel.schich.obd4s.{Cause, Identified, ObdBridge}
 import tel.schich.obd4s.ObdHelper.{asHex, hexDump}
@@ -98,11 +98,10 @@ object Main {
         val threadGroup = new ThreadGroup("virtual-ecu-worker-threads")
         val threads: ThreadFactory = r => new Thread(threadGroup, r, "virtual-ecu-worker")
         val functionalChannel = CanChannels.newIsotpChannel(device, SFF_FUNCTIONAL_ADDRESS, 0x7FF)
-        val provider = new ExtensibleSelectorProvider()
-        val listener = new IsotpListener(threads, provider, ofMinutes(1))
+        val listener = new IsotpListener(threads, EPollSelector.PROVIDER, ofMinutes(1))
 
         controllers.values.foreach { controller =>
-            listener.addChannel(controller.channel, handleRequest(controller.name, controller, t0))
+            listener.addChannel(controller.channel, handleRequest(controller.name, controller, t0) _)
         }
 
         listener.addChannel(functionalChannel, (_, buf) => {
