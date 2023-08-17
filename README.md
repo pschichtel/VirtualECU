@@ -38,7 +38,7 @@ controllers:
           "05":
             name: Coolant Temperature
             action:
-              generator: "linear(1, 8.minutes)
+              generator: "linear(1, 8.minutes)"
 ```
 
 The `controllers` field is a map from functional ECU CAN address (in hex) to ECU objects.
