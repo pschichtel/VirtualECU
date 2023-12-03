@@ -1,22 +1,21 @@
 package tel.schich.virtualecu
 
+import dotty.tools.repl.ScriptEngine
+
 import java.nio.ByteBuffer
 import java.nio.file.{Files, Path, Paths}
 import java.time.Duration.ofMinutes
 import java.util.concurrent.ThreadFactory
-
-import net.jcazevedo.moultingyaml._
 import tel.schich.javacan.IsotpAddress.SFF_FUNCTIONAL_ADDRESS
-import tel.schich.javacan._
-import tel.schich.javacan.linux.epoll.EPollSelector
+import tel.schich.javacan.*
+import tel.schich.javacan.platform.linux.epoll.{EPollAutoDetect, EPollSelector}
 import tel.schich.javacan.util.IsotpListener
 import tel.schich.obd4s.{Cause, Identified, ObdBridge}
 import tel.schich.obd4s.ObdHelper.{asHex, hexDump}
-import tel.schich.obd4s.obd.ObdCauses
+import tel.schich.obd4s.obd.ObdCause
 
-import scala.io.Source
-import scala.tools.reflect.ToolBox
-import scala.reflect.runtime.currentMirror
+import java.io.InputStreamReader
+import javax.script.ScriptEngineManager
 import scala.util.{Failure, Success, Try, Using}
 
 object Main {
@@ -26,7 +25,8 @@ object Main {
     val Name = "Virtual ECU"
 
     def main(args: Array[String]): Unit = {
-
+        JavaCANAutoDetect.initialize()
+        EPollAutoDetect.initialize()
         args match {
             case Array(interfaceName, path) =>
                 val p = Paths.get(path)
@@ -44,12 +44,18 @@ object Main {
             case _ =>
                 println("Usage: <can interface> <config path>")
         }
-
     }
 
     def loadConf(path: Path): Try[EmulationSpec] = {
-        import EmulationConfigurationProtocol._
-        Using(Source.fromFile(path.toFile, "UTF-8"))(_.mkString.parseYaml.convertTo[EmulationSpec])
+        import io.circe.yaml.parser
+        Using(InputStreamReader(Files.newInputStream(path))) { stream =>
+            val result = parser.parse(stream)
+              .flatMap(json => json.as[EmulationSpec])
+            result match {
+                case Right(spec) => spec
+                case Left(error) => throw IllegalArgumentException(s"Failed to load spec: ${error.getMessage}", error)
+            }
+        }
     }
 
     def parseUnsignedHex(n: String): Int = {
@@ -57,9 +63,10 @@ object Main {
     }
 
     def compileScript(code: String): TimeSeriesScript = {
-        val toolbox = currentMirror.mkToolBox()
+        val sem = ScriptEngineManager(getClass.getClassLoader)
+        val scalaEngine = sem.getEngineByName("scala").asInstanceOf[ScriptEngine]
 
-        val result = toolbox.eval(toolbox.parse(code))
+        val result = scalaEngine.eval(code)
         result match {
             case script: TimeSeriesScript @unchecked => script
             case _ => throw new IllegalArgumentException("Failed to compile script!")
@@ -98,7 +105,7 @@ object Main {
         val threadGroup = new ThreadGroup("virtual-ecu-worker-threads")
         val threads: ThreadFactory = r => new Thread(threadGroup, r, "virtual-ecu-worker")
         val functionalChannel = CanChannels.newIsotpChannel(device, SFF_FUNCTIONAL_ADDRESS, 0x7FF)
-        val listener = new IsotpListener(threads, EPollSelector.PROVIDER, ofMinutes(1))
+        val listener = new IsotpListener(threads, EPollSelector(), ofMinutes(1))
 
         controllers.values.foreach { controller =>
             listener.addChannel(controller.channel, handleRequest(controller.name, controller, t0) _)
@@ -142,11 +149,11 @@ object Main {
                                         println(s"Action failed: $msg")
                                 }
                             case None =>
-                                writeErrorResponse(ch, sid, ObdCauses.ServiceNotSupported)
+                                writeErrorResponse(ch, sid, ObdCause.ServiceNotSupported)
                                 println("service cannot be executed directly.")
                         }
                     case None =>
-                        writeErrorResponse(ch, sid, ObdCauses.ServiceNotSupported)
+                        writeErrorResponse(ch, sid, ObdCause.ServiceNotSupported)
                         println("unknown service!")
                 }
             case n if n > 1 =>
@@ -162,7 +169,7 @@ object Main {
                         val unknownPids = (pids.map(_.toInt).toSet -- service.parameters.keySet)
                             .filter(p => (p % ObdBridge.SupportRangeSize) != 0)
                         if (unknownPids.nonEmpty) {
-                            writeErrorResponse(ch, sid, ObdCauses.SubFunctionNotSupportedInvalidFormat)
+                            writeErrorResponse(ch, sid, ObdCause.SubFunctionNotSupportedInvalidFormat)
                             println(s"unknown pids: $unknownPids")
                         } else {
                             val successResponseSid = (sid + ObdBridge.PositiveResponseBase).toByte
@@ -185,18 +192,18 @@ object Main {
                                 case Right(data) =>
                                     data.flip()
                                     ch.write(data)
-                                case Left(Error(cause: Identified)) if ObdCauses.values.contains(cause) =>
+                                case Left(Error(cause: ObdCause)) =>
                                     writeErrorResponse(ch, sid, cause)
                                 case Left(Error(err)) =>
-                                    writeErrorResponse(ch, sid, ObdCauses.RequestSequenceError)
+                                    writeErrorResponse(ch, sid, ObdCause.RequestSequenceError)
                                     println(s"One of the actions failed: ${err.reason}")
                                 case _ =>
-                                    writeErrorResponse(ch, sid, ObdCauses.GeneralReject)
+                                    writeErrorResponse(ch, sid, ObdCause.GeneralReject)
                                     println(s"One of the actions failed for an unknown reason!")
                             }
                         }
                     case None =>
-                        writeErrorResponse(ch, sid, ObdCauses.ServiceNotSupported)
+                        writeErrorResponse(ch, sid, ObdCause.ServiceNotSupported)
                         println("Unknown service!")
                 }
             case _ =>
@@ -207,7 +214,7 @@ object Main {
 
     private def writeErrorResponse(ch: IsotpCanChannel, sid: Byte, cause: Cause with Identified): Unit = {
         writeBuffer.clear()
-        writeBuffer.put(ObdCauses.NegativeResponseCode)
+        writeBuffer.put(ObdCause.NegativeResponseCode)
         writeBuffer.put(sid)
         writeBuffer.put(cause.id.toByte)
         writeBuffer.flip()
@@ -249,7 +256,7 @@ object Main {
                 }
             DataResponse(result)
         } else {
-            Error(ObdCauses.RequestSequenceError)
+            Error(ObdCause.RequestSequenceError)
         }
     }
 

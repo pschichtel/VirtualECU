@@ -1,7 +1,7 @@
 package tel.schich.virtualecu
 
 import tel.schich.javacan.IsotpCanChannel
-import tel.schich.obd4s.obd.ObdCauses.GeneralReject
+import tel.schich.obd4s.obd.ObdCause.GeneralReject
 import tel.schich.obd4s.{Cause, SimpleCause}
 
 case class ECU(name: String, receiveAddress: Int, services: Map[Int, Service], channel: IsotpCanChannel)
@@ -20,8 +20,8 @@ class ParameterAction(compiler: TimeSeriesCompiler, code: String) extends Action
 
     private val fullCode =
         s"""
-          |import tel.schich.virtualecu.FiniteDurationFunctions._
-          |import tel.schich.virtualecu.Quantizers._
+          |import tel.schich.virtualecu.FiniteDurationFunctions.*
+          |import tel.schich.virtualecu.Quantizers.*
           |import scala.concurrent.duration.{DurationDouble, FiniteDuration}
           |
           |$code
