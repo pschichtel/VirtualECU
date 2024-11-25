@@ -17,6 +17,6 @@ libraryDependencies ++= Seq(
     "tel.schich" % "javacan-core-arch-detect" % "3.3.0",
     "tel.schich" % "javacan-epoll-arch-detect" % "3.3.0",
     "io.circe" %% "circe-yaml" % "0.15.1",
-    "org.slf4j" % "slf4j-simple" % "2.0.9",
+    "org.slf4j" % "slf4j-simple" % "2.0.16",
     scalaOrganization.value %% "scala3-compiler" % scalaVersion.value,
 )
