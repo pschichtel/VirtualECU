@@ -143,7 +143,7 @@ abstract class Functions[U] {
 
     def combineAll[T](f: T => F*): T => F = f.reduce(combine[T])
 
-    def combined[T](v: T, f: T => F*): F = combineAll(f: _*)(v)
+    def combined[T](v: T, f: T => F*): F = combineAll(f*)(v)
 
     def gaussianRandom: F =
         _ => rnd.nextGaussian()

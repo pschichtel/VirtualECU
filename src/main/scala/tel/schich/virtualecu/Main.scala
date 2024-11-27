@@ -84,7 +84,7 @@ object Main {
                     case (hexSid, serviceSpec) =>
                         val sid = parseUnsignedHex(hexSid)
 
-                        val actionLoader = loadAction(compileScript) _
+                        val actionLoader = loadAction(compileScript)
 
                         val parameters = serviceSpec.parameters.map {
                             case (hexPid, parameterSpec) =>
@@ -108,7 +108,7 @@ object Main {
         val listener = new IsotpListener(threads, EPollSelector(), ofMinutes(1))
 
         controllers.values.foreach { controller =>
-            listener.addChannel(controller.channel, handleRequest(controller.name, controller, t0) _)
+            listener.addChannel(controller.channel, handleRequest(controller.name, controller, t0))
         }
 
         listener.addChannel(functionalChannel, (_, buf) => {
@@ -212,7 +212,7 @@ object Main {
 
     }
 
-    private def writeErrorResponse(ch: IsotpCanChannel, sid: Byte, cause: Cause with Identified): Unit = {
+    private def writeErrorResponse(ch: IsotpCanChannel, sid: Byte, cause: Cause & Identified): Unit = {
         writeBuffer.clear()
         writeBuffer.put(ObdCause.NegativeResponseCode)
         writeBuffer.put(sid)
