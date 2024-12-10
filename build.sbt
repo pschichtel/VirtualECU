@@ -4,7 +4,7 @@ organization := "tel.schich"
 
 version := "1.0.0-SNAPSHOT"
 
-scalaVersion := "3.6.1"
+scalaVersion := "3.6.2"
 
 publishMavenStyle := true
 
